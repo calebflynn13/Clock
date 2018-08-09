@@ -60,22 +60,6 @@ void setup() {
   currentMinute = EEPROM.read(1);
   am =            EEPROM.read(2);
   
-  // TODO: load in LEDs from EEPROM
-  // print LED EEPROM
-  for (int i = 0; i < 80; i++) {
-    Serial.print("LED: ");
-    Serial.print(i);
-    Serial.print(", ");
-    Serial.print("red = ");
-    Serial.print(EEPROM.read(i * 3 + 3));
-    Serial.print(", ");
-    Serial.print("green = ");
-    Serial.print(EEPROM.read(i * 3 + 4));
-    Serial.print(", ");
-    Serial.print("blue = ");
-    Serial.println(EEPROM.read(i * 3 + 5));
-  }
-  
   digitalWrite(LED_BUILTIN, HIGH);
   printTime();
   Serial.println("startup end");
@@ -282,7 +266,7 @@ void checkForCommand() {
     while (input.charAt(i) != ':' && input.charAt(i) != '\0' && input.charAt(i) != '\n') {
       i++;
     }
-    if (input.substring(0, i).equals("time")) {
+    if (input.substring(0, i).equals("1")) { // time:
       input.remove(0, i+1);
       input.replace(" ", "");
       input.toLowerCase();
@@ -315,40 +299,65 @@ void checkForCommand() {
       changeTime();
     }
     // command format: LED: LED#, redValue, greenValue, blueValue
-    else if (input.substring(0, i).equals("LED")) {
+    else if (input.substring(0, i).equals("2")) { // LED:
       Serial.println("got an LED command");
       input.replace(" ", "");
       input.remove(0, i+1); // remove command
-      Serial.print("input = ");
+      Serial.println("input: ");
       Serial.println(input);
       // get args
-      i = 0;
-      while (input.charAt(i) != ',') {
-        i++;
+      //start loop
+      for (int j = 0; j < 80; j++){ // go through all LEDs
+        i = 0;
+        while (input.charAt(i) != ',') {
+          i++;
+        }
+        int ledNum = input.substring(0, i).toInt();
+        input.remove(0, i+1);
+        i = 0;
+        while (input.charAt(i) != ',') {
+          i++;
+        }
+        int red = input.substring(0, i).toInt();
+        input.remove(0, i+1);
+        i = 0;
+        while (input.charAt(i) != ',') {
+          i++;
+        }
+        int green = input.substring(0, i).toInt();
+        input.remove(0, i+1);
+        i = 0;
+        while (input.charAt(i) != ',') {
+          i++;
+        }
+        int blue = input.substring(0, i).toInt();
+        input.remove(0, i+1);
+        EEPROM.update(ledNum * 3 + 3, (byte)red);
+        EEPROM.update(ledNum * 3 + 4, (byte)green);
+        EEPROM.update(ledNum * 3 + 5, (byte)blue);
       }
-      int ledNum = input.substring(0, i).toInt();
-      input.remove(0, i+1);
-      i = 0;
-      while (input.charAt(i) != ',') {
-        i++;
-      }
-      int red = input.substring(0, i).toInt();
-      input.remove(0, i+1);
-      i = 0;
-      while (input.charAt(i) != ',') {
-        i++;
-      }
-      int green = input.substring(0, i).toInt();
-      input.remove(0, i+1);
-      int blue = input.toInt();
-      EEPROM.update(ledNum * 3 + 3, (byte)red);
-      EEPROM.update(ledNum * 3 + 4, (byte)green);
-      EEPROM.update(ledNum * 3 + 5, (byte)blue);
+      // end loop
     }
-    else if (input.substring(0, i).equals("preset")) {
+    else if (input.substring(0, i).equals("3")) {
       input.remove(0, i+1);
       input.replace(" ", "");
       // TODO: 
+    }
+    else if (input.substring(0, i).equals("debug")) {
+      // print LED EEPROM
+      for (int i = 0; i < 80; i++) {
+        Serial.print("LED: ");
+        Serial.print(i);
+        Serial.print(", ");
+        Serial.print("red = ");
+        Serial.print(EEPROM.read(i * 3 + 3));
+        Serial.print(", ");
+        Serial.print("green = ");
+        Serial.print(EEPROM.read(i * 3 + 4));
+        Serial.print(", ");
+        Serial.print("blue = ");
+        Serial.println(EEPROM.read(i * 3 + 5));
+  }
     }
   }
 }
