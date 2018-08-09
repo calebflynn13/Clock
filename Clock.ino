@@ -31,7 +31,7 @@ void getLit();
 
 void setup() {
   //use for debugging
-  Serial.begin(9600);
+  Serial.begin(38400);
 //  check if serial port is connected:
   while (!Serial) {
     ; // wait for serial port to connect. Needed for native USB port only
@@ -56,10 +56,26 @@ void setup() {
   setPM();
 
   // get time from EEPROM
-  currentHour = EEPROM.read(0);
+  currentHour =   EEPROM.read(0);
   currentMinute = EEPROM.read(1);
-  am = EEPROM.read(2);
+  am =            EEPROM.read(2);
+  
   // TODO: load in LEDs from EEPROM
+  // print LED EEPROM
+  for (int i = 0; i < 80; i++) {
+    Serial.print("LED: ");
+    Serial.print(i);
+    Serial.print(", ");
+    Serial.print("red = ");
+    Serial.print(EEPROM.read(i * 3 + 3));
+    Serial.print(", ");
+    Serial.print("green = ");
+    Serial.print(EEPROM.read(i * 3 + 4));
+    Serial.print(", ");
+    Serial.print("blue = ");
+    Serial.println(EEPROM.read(i * 3 + 5));
+  }
+  
   digitalWrite(LED_BUILTIN, HIGH);
   printTime();
   Serial.println("startup end");
@@ -261,6 +277,7 @@ void checkForCommand() {
   {
     String input = Serial.readString();
     input.trim(); // remove leading and trailing whitespace
+    Serial.println(input);
     int i = 0;
     while (input.charAt(i) != ':' && input.charAt(i) != '\0' && input.charAt(i) != '\n') {
       i++;
@@ -299,8 +316,11 @@ void checkForCommand() {
     }
     // command format: LED: LED#, redValue, greenValue, blueValue
     else if (input.substring(0, i).equals("LED")) {
+      Serial.println("got an LED command");
       input.replace(" ", "");
       input.remove(0, i+1); // remove command
+      Serial.print("input = ");
+      Serial.println(input);
       // get args
       i = 0;
       while (input.charAt(i) != ',') {
@@ -321,7 +341,14 @@ void checkForCommand() {
       int green = input.substring(0, i).toInt();
       input.remove(0, i+1);
       int blue = input.toInt();
-      //TODO: PUT IN EEPROM
+      EEPROM.update(ledNum * 3 + 3, (byte)red);
+      EEPROM.update(ledNum * 3 + 4, (byte)green);
+      EEPROM.update(ledNum * 3 + 5, (byte)blue);
+    }
+    else if (input.substring(0, i).equals("preset")) {
+      input.remove(0, i+1);
+      input.replace(" ", "");
+      // TODO: 
     }
   }
 }
