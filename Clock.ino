@@ -1,9 +1,17 @@
 #include <FastLED.h>
 #include <EEPROM.h>
 
+#define LED_PIN     12
+#define NUM_LEDS    80
+#define BRIGHTNESS  64
+#define LED_TYPE    WS2812B
+#define COLOR_ORDER GRB
+#define MAXBUFFER   500
+CRGB leds[NUM_LEDS];
+byte colors[80 * 3];
 
 // declare global variables here
-const long minute = 60000; // 1 minute in ms
+#define MINUTE 60000
 unsigned long currentTime;
 unsigned long previousTime = 0;
 byte currentMinute = 0;
@@ -30,19 +38,17 @@ void changeTime();
 void getLit();
 
 void setup() {
-  //use for debugging
-  Serial.begin(38400);
-//  check if serial port is connected:
+  // use for debugging
+  Serial.begin(9600);
+  // check if serial port is connected:
   while (!Serial) {
-    ; // wait for serial port to connect. Needed for native USB port only
+    ; // wait for serial port to connect. Needed for native USB
   }
   Serial.println("startup begin");
 
   // set pins:
   pinMode(LED_BUILTIN, OUTPUT);
-  for (int i = 2; i <= 13; i++)
-    pinMode(i, OUTPUT);
-  digitalWrite(LED_BUILTIN, HIGH);
+  pinMode(12, OUTPUT);
 
   // initalize memory for didits
   firstDigit = (char*)malloc(sizeof(char) * 7);
@@ -56,12 +62,24 @@ void setup() {
   setPM();
 
   // get time from EEPROM
-  currentHour =   EEPROM.read(0);
-  currentMinute = EEPROM.read(1);
-  am =            EEPROM.read(2);
+//  currentHour =   EEPROM.read(0);
+//  currentMinute = EEPROM.read(1);
+//  am =            EEPROM.read(2);
+  setTime(); // set to the real time
+  
+  delay(3000); // power-up safety delay
+  FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS);
+  FastLED.setBrightness(BRIGHTNESS);
+  FastLED.setMaxRefreshRate(1, true); // set to 1 hz to allow messages to get through
+  printTime();
+  // read in colors from memory
+  for (int i = 0; i < 80; i++) {
+    colors[i * 3]     = EEPROM.read(i * 3 + 3); // red
+    colors[i * 3 + 1] = EEPROM.read(i * 3 + 4); // green
+    colors[i * 3 + 2] = EEPROM.read(i * 3 + 5); // blue
+  }
   
   digitalWrite(LED_BUILTIN, HIGH);
-  printTime();
   Serial.println("startup end");
 }
 
@@ -69,7 +87,7 @@ void loop() {
   // get current time
   currentTime = millis();
   // currentently accounts for millis() overflow by calculating duration
-  if (currentTime - previousTime >= minute) {
+  if (currentTime - previousTime >= MINUTE) {
     // TODO: CHANGE but rn just now blink  builtin light
     if (digitalRead(LED_BUILTIN) == HIGH) {
       digitalWrite(LED_BUILTIN, LOW);
@@ -85,6 +103,7 @@ void loop() {
     previousTime = currentTime;
   }
   checkForCommand(); // used to set the time
+  Serial.flush();
   getLit();
 }
 
@@ -156,21 +175,21 @@ int setDigit(int clockDigit, int setTo) {
             array[2] = '1';
             array[3] = '0';
             array[4] = '0';
-            array[5] = '1';
-            array[6] = '0';
-            break;
-        case 2:
-            array[0] = '1';
-            array[1] = '0';
-            array[2] = '1';
-            array[3] = '1';
-            array[4] = '1';
             array[5] = '0';
             array[6] = '1';
             break;
+        case 2:
+            array[0] = '0';
+            array[1] = '1';
+            array[2] = '1';
+            array[3] = '1';
+            array[4] = '1';
+            array[5] = '1';
+            array[6] = '0';
+            break;
         case 3:
-            array[0] = '1';
-            array[1] = '0';
+            array[0] = '0';
+            array[1] = '1';
             array[2] = '1';
             array[3] = '1';
             array[4] = '0';
@@ -178,13 +197,13 @@ int setDigit(int clockDigit, int setTo) {
             array[6] = '1';
             break;
         case 4:
-            array[0] = '0';
-            array[1] = '1';
+            array[0] = '1';
+            array[1] = '0';
             array[2] = '1';
             array[3] = '1';
             array[4] = '0';
-            array[5] = '1';
-            array[6] = '0';
+            array[5] = '0';
+            array[6] = '1';
             break;
         case 5:
             array[0] = '1';
@@ -205,13 +224,13 @@ int setDigit(int clockDigit, int setTo) {
             array[6] = '1';
             break;
         case 7:
-            array[0] = '1';
-            array[1] = '0';
+            array[0] = '0';
+            array[1] = '1';
             array[2] = '1';
             array[3] = '0';
             array[4] = '0';
-            array[5] = '1';
-            array[6] = '0';
+            array[5] = '0';
+            array[6] = '1';
             break;
         case 8:
             array[0] = '1';
@@ -228,8 +247,8 @@ int setDigit(int clockDigit, int setTo) {
             array[2] = '1';
             array[3] = '1';
             array[4] = '0';
-            array[5] = '1';
-            array[6] = '0';
+            array[5] = '0';
+            array[6] = '1';
             break;
         default:
             return 1;
@@ -256,17 +275,79 @@ char* getDigitArray(int clockDigit) {
     return firstDigit;
 }
 
+
+
+void getLit() {
+  // set to proper colors:
+  for (int i = 0; i < 80; i++) {
+    leds[i].red = getRed(i);
+    leds[i].green = getGreen(i);
+    leds[i].blue = getBlue(i);
+  }
+  // turn ones we don't want off
+  // first digit : LEDs 0 - 5
+  if (currentHour < 10) {
+    // we dont' need the 10's place for the hour
+    for (int i = 0; i < 6; i++) {
+      leds[i] = CRGB::Black; // turn off LEDs 0 - 5.
+    }
+  }
+  // second digit : LEDs 6 - 26
+  for (int i = 0; i < 7; i++) {
+    if (secondDigit[i] == '0') {
+      leds[i * 3 + 6] = CRGB::Black;
+      leds[i * 3 + 7] = CRGB::Black;
+      leds[i * 3 + 8] = CRGB::Black;
+    }
+  }
+  // third digit : LEDs 29 - 49
+  for (int i = 0; i < 7; i++) {
+    if (thirdDigit[i] == '0') {
+      leds[i * 3 + 29] = CRGB::Black;
+      leds[i * 3 + 30] = CRGB::Black;
+      leds[i * 3 + 31] = CRGB::Black;
+    }
+  }
+  // fourth digit : LEDs 50 - 70
+  for (int i = 0; i < 7; i++) {
+    if (thirdDigit[i] == '0') {
+      leds[i * 3 + 50] = CRGB::Black;
+      leds[i * 3 + 51] = CRGB::Black;
+      leds[i * 3 + 52] = CRGB::Black;
+    }
+  }
+  
+  FastLED.show();
+}
+
+byte getRed(int i) {
+  return colors[i * 3]; // red part of LED in memory
+}
+
+byte getGreen(int i) {
+  return colors[i * 3 + 1]; // green part of LED  
+}
+
+byte getBlue(int i) {
+  return colors[i * 3 + 2]; // blue part of LED in memory
+}
+
+
 void checkForCommand() {
   if (Serial.available() > 0)
   {
+    Serial.flush();
     String input = Serial.readString();
+    //String input = Serial.readStringUntil('\n');
     input.trim(); // remove leading and trailing whitespace
+    Serial.print("input = ");
     Serial.println(input);
     int i = 0;
     while (input.charAt(i) != ':' && input.charAt(i) != '\0' && input.charAt(i) != '\n') {
       i++;
     }
     if (input.substring(0, i).equals("1")) { // time:
+      Serial.println(freeRam());
       input.remove(0, i+1);
       input.replace(" ", "");
       input.toLowerCase();
@@ -274,8 +355,10 @@ void checkForCommand() {
       if (input.charAt(1) == ':') {
         currentHour = (byte)input.substring(0, 1).toInt();
         currentMinute = (byte)input.substring(2,4).toInt();
-        Serial.println("1 = " + currentHour);
-        Serial.println("2 = " + currentMinute);
+        Serial.print("hour = ");
+        Serial.println(currentHour);
+        Serial.print("minute = ");
+        Serial.println(currentMinute);
 
         if (input.substring(4,6).equals("am"))
           am = 1;
@@ -312,19 +395,19 @@ void checkForCommand() {
         while (input.charAt(i) != ',') {
           i++;
         }
-        int ledNum = input.substring(0, i).toInt();
+        byte ledNum = (byte)input.substring(0, i).toInt();
         input.remove(0, i+1);
         i = 0;
         while (input.charAt(i) != ',') {
           i++;
         }
-        int red = input.substring(0, i).toInt();
+        byte red = (byte)input.substring(0, i).toInt();
         input.remove(0, i+1);
         i = 0;
         while (input.charAt(i) != ',') {
           i++;
         }
-        int green = input.substring(0, i).toInt();
+        byte green = (byte)input.substring(0, i).toInt();
         input.remove(0, i+1);
         i = 0;
         while (input.charAt(i) != ',') {
@@ -332,18 +415,35 @@ void checkForCommand() {
         }
         int blue = input.substring(0, i).toInt();
         input.remove(0, i+1);
+
+        Serial.print("LED: ");
+        Serial.print(ledNum);
+        Serial.print(", ");
+        Serial.print("red = ");
+        Serial.print(red);
+        Serial.print(", ");
+        Serial.print("green = ");
+        Serial.print(green);
+        Serial.print(", ");
+        Serial.print("blue = ");
+        Serial.println(blue);
+        
         EEPROM.update(ledNum * 3 + 3, (byte)red);
         EEPROM.update(ledNum * 3 + 4, (byte)green);
         EEPROM.update(ledNum * 3 + 5, (byte)blue);
+        colors[ledNum * 3] = (byte)red;
+        colors[ledNum * 3 + 1] = (byte)green;
+        colors[ledNum * 3 + 2] = (byte)blue;
+        
       }
       // end loop
     }
-    else if (input.substring(0, i).equals("3")) {
+    else if (input.substring(0, i).equals("3")) { // presets
       input.remove(0, i+1);
       input.replace(" ", "");
       // TODO: 
     }
-    else if (input.substring(0, i).equals("debug")) {
+    else if (input.substring(0, i).equals("9")) { // debugging
       // print LED EEPROM
       for (int i = 0; i < 80; i++) {
         Serial.print("LED: ");
@@ -359,13 +459,6 @@ void checkForCommand() {
         Serial.println(EEPROM.read(i * 3 + 5));
   }
     }
-  }
-}
-
-void getLit() {
-  for (int i = 1; i <= 4; i++) {
-    char* array = getDigitArray(i);
-    //TODO:
   }
 }
 
@@ -411,3 +504,15 @@ void printDigits() {
     }
     Serial.print("\n");
 }
+
+int freeRam() {
+  extern int __heap_start, *__brkval; 
+  int v; 
+  return (int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval); 
+}
+
+//void getString(String *input) {
+//  int charsRead;
+//  charsRead = Serial.readBytesUntil('\n', (char*)input, MAXBUFFER - 1);
+//  (*input).setCharAt(charsRead, '\0');      // Make it a string -- note lowercase 's'
+//}
