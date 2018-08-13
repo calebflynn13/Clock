@@ -18,6 +18,8 @@ byte currentMinute = 0;
 byte currentHour = 12;
 byte am = 1; // 0 = false 1 = true;
 byte startUpMode = 0; // 1 = true, 0 = false;
+byte animation = 0;
+unsigned long animationStart;
 
 char* firstDigit;
 char* secondDigit;
@@ -268,10 +270,51 @@ char* getDigitArray(int clockDigit) {
 
 void getLit() {
   // set to proper colors:
-  for (int i = 0; i < 73; i++) {
-    leds[i].red = getRed(i);
-    leds[i].green = getGreen(i);
-    leds[i].blue = getBlue(i);
+  if (animation) {
+    if (animation == 1) {
+      // do solid rainbow transition animation
+      float progress = (float) (((currentTime - animationStart) % 24000) / 24000.0);
+      byte fractionProgress = (byte) (progress * 6); // 0 - 5
+      for (int i = 0; i < 73; i++) {
+        if (fractionProgress == 0) {
+          leds[i].red = 255;
+          leds[i].green = (byte) ((progress * 6.0) * 255.0); // increase green
+          leds[i].blue = 0;
+        }
+        else if (fractionProgress == 1) {
+          leds[i].red = (byte) (255 - (((progress * 6.0) - 1.0) * 255)); // decrease red
+          leds[i].green = 255;
+          leds[i].blue = 0;
+        }
+        else if (fractionProgress == 2) {
+          leds[i].red = 0;
+          leds[i].green = 255;
+          leds[i].blue = (byte) (((progress * 6.0) - 2.0) * 255);// increase blue
+        }
+        else if (fractionProgress == 3) {
+          leds[i].red = 0;
+          leds[i].green = (byte) (255 - (((progress * 6.0) - 3.0) * 255)); // decrease green
+          leds[i].blue = 255;
+        }
+        else if (fractionProgress == 4) {
+          leds[i].red = (byte) (((progress * 6.0) - 4.0) * 255); // increase red
+          leds[i].green = 0;
+          leds[i].blue = 255;
+        }
+        else if (fractionProgress >= 5) {
+          leds[i].red = 255;
+          leds[i].green = 0;
+          leds[i].blue = (byte) (255 - (((progress * 6.0) - 5.0) * 255)); // decrease blue
+        }
+      }
+    }
+  }
+  else {
+    for (int i = 0; i < 73; i++) {
+      leds[i].red = getRed(i);
+      leds[i].green = getGreen(i);
+      leds[i].blue = getBlue(i);
+    }
   }
   // turn ones we don't want off
   // first digit : LEDs 0 - 5
@@ -376,10 +419,8 @@ void checkForCommand() {
     }
     // command format: LED: LED#, redValue, greenValue, blueValue
     else if (input.substring(0, i).equals("2")) { // LED:
-      Serial.print("Free Ram left = ");
-      Serial.print(freeRam());
-      Serial.println(" bytes");
       Serial.println("got an LED command");
+      animation = 0; // not an animation any more
       input.replace(" ", "");
       input.remove(0, i+1); // remove command
       // get args
@@ -418,7 +459,15 @@ void checkForCommand() {
     else if (input.substring(0, i).equals("3")) { // presets
       input.remove(0, i+1);
       input.replace(" ", "");
-      // TODO: 
+      animation = (byte)input.substring(0).toInt(); // get animation #
+      if (animation == 1) {
+        for (int i = 0; i < 73; i++) {
+          leds[i] = 0xFF0000;
+        }
+      }
+      Serial.print("animation # = ");
+      Serial.println(animation);
+      animationStart = millis();
     }
     else if (input.substring(0, i).equals("4")) { // turn LEDs off
       Serial.println("turning LEDs off");
