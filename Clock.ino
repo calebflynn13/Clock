@@ -18,8 +18,8 @@ byte currentMinute = 0;
 byte currentHour = 12;
 byte am = 1; // 0 = false 1 = true;
 byte startUpMode = 0; // 1 = true, 0 = false;
-byte animation = 0;
-unsigned long animationStart;
+byte animation = 0; // which animation we are playing
+unsigned long animationStart; // what time the animation starts
 
 char* firstDigit;
 char* secondDigit;
@@ -70,7 +70,6 @@ void setup() {
   delay(3000); // power-up safety delay
   FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS);
   FastLED.setBrightness(BRIGHTNESS);
-  // FastLED.setMaxRefreshRate(1, true); // set to 1 hz to allow messages to get through
   printTime();
   // read in colors from memory
   for (int i = 0; i < 73; i++) {
@@ -78,6 +77,8 @@ void setup() {
     colors[i * 3 + 1] = EEPROM.read(i * 3 + 4); // green
     colors[i * 3 + 2] = EEPROM.read(i * 3 + 5); // blue
   }
+  // read in animation variable from memory
+  animation = EEPROM.read(73 * 3 + 3);
   
   digitalWrite(LED_BUILTIN, HIGH);
   Serial.println("startup end");
@@ -421,6 +422,7 @@ void checkForCommand() {
     else if (input.substring(0, i).equals("2")) { // LED:
       Serial.println("got an LED command");
       animation = 0; // not an animation any more
+      EEPROM.update(73 * 3 + 3, animation);
       input.replace(" ", "");
       input.remove(0, i+1); // remove command
       // get args
@@ -460,13 +462,15 @@ void checkForCommand() {
       input.remove(0, i+1);
       input.replace(" ", "");
       animation = (byte)input.substring(0).toInt(); // get animation #
+      EEPROM.update(73 * 3 + 3, animation);
+      Serial.print("animation # = ");
+      Serial.println(animation);
       if (animation == 1) {
         for (int i = 0; i < 73; i++) {
           leds[i] = 0xFF0000;
         }
       }
-      Serial.print("animation # = ");
-      Serial.println(animation);
+
       animationStart = millis();
     }
     else if (input.substring(0, i).equals("4")) { // turn LEDs off
