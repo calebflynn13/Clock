@@ -2,13 +2,13 @@
 #include <EEPROM.h>
 
 #define LED_PIN     12
-#define NUM_LEDS    80
+#define NUM_LEDS    73
 #define BRIGHTNESS  64
 #define LED_TYPE    WS2812B
 #define COLOR_ORDER GRB
 #define MAXBUFFER   500
 CRGB leds[NUM_LEDS];
-byte colors[80 * 3];
+byte colors[73 * 3];
 
 // declare global variables here
 #define MINUTE 60000
@@ -17,6 +17,7 @@ unsigned long previousTime = 0;
 byte currentMinute = 0;
 byte currentHour = 12;
 byte am = 1; // 0 = false 1 = true;
+byte startUpMode = 0; // 1 = true, 0 = false;
 
 char* firstDigit;
 char* secondDigit;
@@ -40,10 +41,7 @@ void getLit();
 void setup() {
   // use for debugging
   Serial.begin(9600);
-  // check if serial port is connected:
-  while (!Serial) {
-    ; // wait for serial port to connect. Needed for native USB
-  }
+  // TODO: check if serial port is connected:
   Serial.println("startup begin");
 
   // set pins:
@@ -62,18 +60,18 @@ void setup() {
   setPM();
 
   // get time from EEPROM
-//  currentHour =   EEPROM.read(0);
-//  currentMinute = EEPROM.read(1);
-//  am =            EEPROM.read(2);
+  currentHour =   EEPROM.read(0);
+  currentMinute = EEPROM.read(1);
+  am =            EEPROM.read(2);
   setTime(); // set to the real time
   
   delay(3000); // power-up safety delay
   FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS);
   FastLED.setBrightness(BRIGHTNESS);
-  FastLED.setMaxRefreshRate(1, true); // set to 1 hz to allow messages to get through
+  // FastLED.setMaxRefreshRate(1, true); // set to 1 hz to allow messages to get through
   printTime();
   // read in colors from memory
-  for (int i = 0; i < 80; i++) {
+  for (int i = 0; i < 73; i++) {
     colors[i * 3]     = EEPROM.read(i * 3 + 3); // red
     colors[i * 3 + 1] = EEPROM.read(i * 3 + 4); // green
     colors[i * 3 + 2] = EEPROM.read(i * 3 + 5); // blue
@@ -88,23 +86,14 @@ void loop() {
   currentTime = millis();
   // currentently accounts for millis() overflow by calculating duration
   if (currentTime - previousTime >= MINUTE) {
-    // TODO: CHANGE but rn just now blink  builtin light
-    if (digitalRead(LED_BUILTIN) == HIGH) {
-      digitalWrite(LED_BUILTIN, LOW);
-    }
-    else {
-      digitalWrite(LED_BUILTIN, HIGH);
-    }
-    // TODO: END OF NEEDED CHANGE
     incrementMinute();
     printTime();
-
     // last thing to do
     previousTime = currentTime;
   }
   checkForCommand(); // used to set the time
-  Serial.flush();
   getLit();
+  delay(30); // slow down, don't hurt yourself
 }
 
 void changeTime() {
@@ -279,7 +268,7 @@ char* getDigitArray(int clockDigit) {
 
 void getLit() {
   // set to proper colors:
-  for (int i = 0; i < 80; i++) {
+  for (int i = 0; i < 73; i++) {
     leds[i].red = getRed(i);
     leds[i].green = getGreen(i);
     leds[i].blue = getBlue(i);
@@ -316,8 +305,12 @@ void getLit() {
       leds[i * 3 + 52] = CRGB::Black;
     }
   }
-  
-  FastLED.show();
+
+  if (startUpMode == 0) {
+    FastLED.show();
+  } else {
+    // do nothing
+  }
 }
 
 byte getRed(int i) {
@@ -383,38 +376,22 @@ void checkForCommand() {
     }
     // command format: LED: LED#, redValue, greenValue, blueValue
     else if (input.substring(0, i).equals("2")) { // LED:
+      Serial.print("Free Ram left = ");
+      Serial.print(freeRam());
+      Serial.println(" bytes");
       Serial.println("got an LED command");
       input.replace(" ", "");
       input.remove(0, i+1); // remove command
-      Serial.println("input: ");
-      Serial.println(input);
       // get args
       //start loop
-      for (int j = 0; j < 80; j++){ // go through all LEDs
-        i = 0;
-        while (input.charAt(i) != ',') {
-          i++;
-        }
-        byte ledNum = (byte)input.substring(0, i).toInt();
-        input.remove(0, i+1);
-        i = 0;
-        while (input.charAt(i) != ',') {
-          i++;
-        }
-        byte red = (byte)input.substring(0, i).toInt();
-        input.remove(0, i+1);
-        i = 0;
-        while (input.charAt(i) != ',') {
-          i++;
-        }
-        byte green = (byte)input.substring(0, i).toInt();
-        input.remove(0, i+1);
-        i = 0;
-        while (input.charAt(i) != ',') {
-          i++;
-        }
-        int blue = input.substring(0, i).toInt();
-        input.remove(0, i+1);
+      for (int j = 0; j < 73; j++){ // go through all LEDs
+        byte ledNum = j;
+        byte red = (byte) strtol(input.substring(0, 2).c_str(), NULL, 16);
+        input.remove(0, 2);
+        byte green = (byte) strtol(input.substring(0, 2).c_str(), NULL, 16);
+        input.remove(0, 2);
+        byte blue = (byte) strtol(input.substring(0, 2).c_str(), NULL, 16);
+        input.remove(0, 2);
 
         Serial.print("LED: ");
         Serial.print(ledNum);
@@ -443,9 +420,18 @@ void checkForCommand() {
       input.replace(" ", "");
       // TODO: 
     }
+    else if (input.substring(0, i).equals("4")) { // turn LEDs off
+      Serial.println("turning LEDs off");
+      startUpMode = 1;
+      FastLED.clear();
+    }
+    else if (input.substring(0, i).equals("5")) { // turn LEDs on
+      Serial.println("turning LEDs on");
+      startUpMode = 0;
+    }
     else if (input.substring(0, i).equals("9")) { // debugging
       // print LED EEPROM
-      for (int i = 0; i < 80; i++) {
+      for (int i = 0; i < 73; i++) {
         Serial.print("LED: ");
         Serial.print(i);
         Serial.print(", ");
@@ -457,7 +443,7 @@ void checkForCommand() {
         Serial.print(", ");
         Serial.print("blue = ");
         Serial.println(EEPROM.read(i * 3 + 5));
-  }
+      }
     }
   }
 }
