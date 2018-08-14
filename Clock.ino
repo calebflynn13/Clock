@@ -17,23 +17,36 @@ unsigned long previousTime = 0;
 byte currentMinute = 0;
 byte currentHour = 12;
 byte am = 1; // 0 = false 1 = true;
+
 byte startUpMode = 0; // 1 = true, 0 = false;
+
 byte animation = 0; // which animation we are playing
 unsigned long animationStart; // what time the animation starts
+
+byte timerMode = 0; // 1 = true, 0 = false
+unsigned long timerStart;
+unsigned long timerLength = 0;
+byte timerAm = 0;
 
 char* firstDigit;
 char* secondDigit;
 char* thirdDigit;
 char* fourthDigit;
 
+char* timerFirstDigit;
+char* timerSecondDigit;
+char* timerThirdDigit;
+char* timerFourthDigit;
+
 //protoypes
 void incrementMinute();
 void incrementHour();
-int setDigit(int clockDigit, int setTo);
-char* getDigitArray(int clockDigit);
+int setDigit(int clockDigit, int setTo, byte clockType);
+char* getDigitArray(int clockDigit, byte clockType);
 void printDigits();
 void printTime();
 void setTime();
+void setTimer(byte hour, byte minute, byte second);
 void setAM();
 void setPM();
 void checkForCommand();
@@ -55,18 +68,29 @@ void setup() {
   secondDigit = (char*)malloc(sizeof(char) * 7);
   thirdDigit = (char*)malloc(sizeof(char) * 7);
   fourthDigit = (char*)malloc(sizeof(char) * 7);
-  setDigit(1, 1);
-  setDigit(2, 2);
-  setDigit(3, 0);
-  setDigit(4, 0);
+  setDigit(1, 1, 0);
+  setDigit(2, 2, 0);
+  setDigit(3, 0, 0);
+  setDigit(4, 0, 0);
   setPM();
+
+  // initialize timer digits
+  timerFirstDigit = (char*)malloc(sizeof(char) * 7);
+  timerSecondDigit = (char*)malloc(sizeof(char) * 7);
+  timerThirdDigit = (char*)malloc(sizeof(char) * 7);
+  timerFourthDigit = (char*)malloc(sizeof(char) * 7);
+  setDigit(1, 0, 1);
+  setDigit(2, 0, 1);
+  setDigit(3, 0, 1);
+  setDigit(4, 0, 1);
 
   // get time from EEPROM
   currentHour =   EEPROM.read(0);
   currentMinute = EEPROM.read(1);
   am =            EEPROM.read(2);
   setTime(); // set to the real time
-  
+  timerMode = 0; // only sent over command
+
   delay(3000); // power-up safety delay
   FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS);
   FastLED.setBrightness(BRIGHTNESS);
@@ -79,7 +103,7 @@ void setup() {
   }
   // read in animation variable from memory
   animation = EEPROM.read(73 * 3 + 3);
-  
+
   digitalWrite(LED_BUILTIN, HIGH);
   Serial.println("startup end");
 }
@@ -93,6 +117,13 @@ void loop() {
     printTime();
     // last thing to do
     previousTime = currentTime;
+  }
+  if (timerMode) {
+    timerLength -= (currentTime - timerStart);
+    byte hour = timerLength /  3600000;  // get hours
+    byte minute = (timerLength - hour) / 60000; // get minutes left
+    byte second = (timerLength - hour - minute) / 1000; // get seconds left
+    setTimer(hour, minute, second);
   }
   checkForCommand(); // used to set the time
   getLit();
@@ -123,10 +154,32 @@ void incrementHour() {
 
 void setTime() {
   // set the clock digits
-  setDigit(1, currentHour / 10);
-  setDigit(2, currentHour - (currentHour / 10));
-  setDigit(3, currentMinute / 10);
-  setDigit(4, currentMinute - (currentMinute / 10));
+  setDigit(1, currentHour / 10, 0);
+  setDigit(2, currentHour - (currentHour / 10), 0);
+  setDigit(3, currentMinute / 10, 0);
+  setDigit(4, currentMinute - (currentMinute / 10), 0);
+}
+
+void setTimer(byte hour, byte minute, byte second) {
+  // case 1: minute > 20
+  if (minute > 20 || hour > 0) {
+    setDigit(1, hour / 10, 1);
+    setDigit(2, hour - (hour / 10), 1);
+    setDigit(3, minute / 10, 1);
+    setDigit(4, minute - (minute / 10), 1);
+    if (second % 2 == 0) {
+      timerAm = 1;
+    }
+    else {
+      timerAm = 0;
+    }
+  }
+  else { // 19 or less minutes left, put minutes in left side, seconds on right
+    setDigit(1, minute / 10, 1);
+    setDigit(2, minute - (minute / 10), 1);
+    setDigit(1, second / 10, 1);
+    setDigit(2, second - (second / 10), 1);
+  }
 }
 
 void setAM() {
@@ -140,131 +193,167 @@ void setPM() {
  * inputs:
  *     clockDigit: which digit are we editing? 1, 2, 3, or 4 from left to right
  *     setTo:      the value we want that clockDigit to be set to 0-12 for most
+ *     clockType:  0 = normal clock, 1 = timer clock
  * return 0 on success and 1 on failure
  */
-int setDigit(int clockDigit, int setTo) {
-    // verify we have good parameters
-    if (setTo < 0 || setTo > 9)
-        return 1;
-    if (clockDigit == 1 && (setTo < 0 || setTo > 1))
-        return 1;
-
-    char* array = getDigitArray(clockDigit);
-
-    switch (setTo) {
-        case 0:
-            array[0] = '1';
-            array[1] = '1';
-            array[2] = '1';
-            array[3] = '0';
-            array[4] = '1';
-            array[5] = '1';
-            array[6] = '1';
-            break;
-        case 1:
-            array[0] = '0';
-            array[1] = '0';
-            array[2] = '1';
-            array[3] = '0';
-            array[4] = '0';
-            array[5] = '0';
-            array[6] = '1';
-            break;
-        case 2:
-            array[0] = '0';
-            array[1] = '1';
-            array[2] = '1';
-            array[3] = '1';
-            array[4] = '1';
-            array[5] = '1';
-            array[6] = '0';
-            break;
-        case 3:
-            array[0] = '0';
-            array[1] = '1';
-            array[2] = '1';
-            array[3] = '1';
-            array[4] = '0';
-            array[5] = '1';
-            array[6] = '1';
-            break;
-        case 4:
-            array[0] = '1';
-            array[1] = '0';
-            array[2] = '1';
-            array[3] = '1';
-            array[4] = '0';
-            array[5] = '0';
-            array[6] = '1';
-            break;
-        case 5:
-            array[0] = '1';
-            array[1] = '1';
-            array[2] = '0';
-            array[3] = '1';
-            array[4] = '0';
-            array[5] = '1';
-            array[6] = '1';
-            break;
-        case 6:
-            array[0] = '1';
-            array[1] = '1';
-            array[2] = '0';
-            array[3] = '1';
-            array[4] = '1';
-            array[5] = '1';
-            array[6] = '1';
-            break;
-        case 7:
-            array[0] = '0';
-            array[1] = '1';
-            array[2] = '1';
-            array[3] = '0';
-            array[4] = '0';
-            array[5] = '0';
-            array[6] = '1';
-            break;
-        case 8:
-            array[0] = '1';
-            array[1] = '1';
-            array[2] = '1';
-            array[3] = '1';
-            array[4] = '1';
-            array[5] = '1';
-            array[6] = '1';
-            break;
-        case 9:
-            array[0] = '1';
-            array[1] = '1';
-            array[2] = '1';
-            array[3] = '1';
-            array[4] = '0';
-            array[5] = '0';
-            array[6] = '1';
-            break;
-        default:
-            return 1;
-            break;
+int setDigit(int clockDigit, int setTo, byte clockType) {
+  char* array = getDigitArray(clockDigit, clockType);
+  if (clockDigit == 1) {
+    // it can only be a 0 or a 1
+    switch (setTo){
+      case 0:
+        array[0] = '0';
+        array[1] = '0';
+        array[2] = '0';
+        array[3] = '0';
+        array[4] = '0';
+        array[5] = '0';
+        array[6] = '0';
+        break;
+      case 1:
+        array[0] = '0';
+        array[1] = '0';
+        array[2] = '1';
+        array[3] = '0';
+        array[4] = '0';
+        array[5] = '0';
+        array[6] = '1';
+        break;
     }
     return 0;
+  }
+  switch (setTo) {
+    case 0:
+      array[0] = '1';
+      array[1] = '1';
+      array[2] = '1';
+      array[3] = '0';
+      array[4] = '1';
+      array[5] = '1';
+      array[6] = '1';
+      break;
+    case 1:
+      array[0] = '0';
+      array[1] = '0';
+      array[2] = '1';
+      array[3] = '0';
+      array[4] = '0';
+      array[5] = '0';
+      array[6] = '1';
+      break;
+    case 2:
+      array[0] = '0';
+      array[1] = '1';
+      array[2] = '1';
+      array[3] = '1';
+      array[4] = '1';
+      array[5] = '1';
+      array[6] = '0';
+      break;
+    case 3:
+      array[0] = '0';
+      array[1] = '1';
+      array[2] = '1';
+      array[3] = '1';
+      array[4] = '0';
+      array[5] = '1';
+      array[6] = '1';
+      break;
+    case 4:
+      array[0] = '1';
+      array[1] = '0';
+      array[2] = '1';
+      array[3] = '1';
+      array[4] = '0';
+      array[5] = '0';
+      array[6] = '1';
+      break;
+    case 5:
+      array[0] = '1';
+      array[1] = '1';
+      array[2] = '0';
+      array[3] = '1';
+      array[4] = '0';
+      array[5] = '1';
+      array[6] = '1';
+      break;
+    case 6:
+      array[0] = '1';
+      array[1] = '1';
+      array[2] = '0';
+      array[3] = '1';
+      array[4] = '1';
+      array[5] = '1';
+      array[6] = '1';
+      break;
+    case 7:
+      array[0] = '0';
+      array[1] = '1';
+      array[2] = '1';
+      array[3] = '0';
+      array[4] = '0';
+      array[5] = '0';
+      array[6] = '1';
+      break;
+    case 8:
+      array[0] = '1';
+      array[1] = '1';
+      array[2] = '1';
+      array[3] = '1';
+      array[4] = '1';
+      array[5] = '1';
+      array[6] = '1';
+      break;
+    case 9:
+      array[0] = '1';
+      array[1] = '1';
+      array[2] = '1';
+      array[3] = '1';
+      array[4] = '0';
+      array[5] = '0';
+      array[6] = '1';
+      break;
+    default:
+      return 1;
+      break;
+  }
+  return 0;
 }
 
-char* getDigitArray(int clockDigit) {
+char* getDigitArray(int clockDigit, byte clockType) {
+  if (clockType == 0) { // clock mode
     switch(clockDigit) {
-        case 1:
-            return firstDigit;
-            break;
-        case 2:
-            return secondDigit;
-            break;
-        case 3:
-            return thirdDigit;
-            break;
-        case 4:
-            return fourthDigit;
-            break;
+      case 1:
+        return firstDigit;
+        break;
+      case 2:
+        return secondDigit;
+        break;
+      case 3:
+        return thirdDigit;
+        break;
+      case 4:
+        return fourthDigit;
+        break;
     }
-    return firstDigit;
+  }
+  else if (clockType == 1) {
+    switch(clockDigit) { // timer mode
+      case 1:
+        return timerFirstDigit;
+        break;
+      case 2:
+        return timerSecondDigit;
+        break;
+      case 3:
+        return timerThirdDigit;
+        break;
+      case 4:
+        return timerFourthDigit;
+        break;
+    }
+  }
+    return firstDigit; // default case
 }
 
 
@@ -317,36 +406,63 @@ void getLit() {
       leds[i].blue = getBlue(i);
     }
   }
-  // turn ones we don't want off
+  
+  // turn ones we don't want off for timer or clock depending on mode
   // first digit : LEDs 0 - 5
-  if (currentHour < 10) {
-    // we dont' need the 10's place for the hour
-    for (int i = 0; i < 6; i++) {
-      leds[i] = CRGB::Black; // turn off LEDs 0 - 5.
-    }
+  if ((getDigitArray(1, timerMode))[2] == '0') {
+    leds[0] = CRGB::Black;
+    leds[1] = CRGB::Black;
+    leds[2] = CRGB::Black;
   }
+  if ((getDigitArray(1, timerMode))[6] == '0') {
+    leds[3] = CRGB::Black;
+    leds[4] = CRGB::Black;
+    leds[5] = CRGB::Black;
+  }
+  
   // second digit : LEDs 6 - 26
   for (int i = 0; i < 7; i++) {
-    if (secondDigit[i] == '0') {
+    if ((getDigitArray(2, timerMode))[i] == '0') {
       leds[i * 3 + 6] = CRGB::Black;
       leds[i * 3 + 7] = CRGB::Black;
       leds[i * 3 + 8] = CRGB::Black;
     }
   }
+  
   // third digit : LEDs 29 - 49
   for (int i = 0; i < 7; i++) {
-    if (thirdDigit[i] == '0') {
+    if ((getDigitArray(3, timerMode))[i] == '0') {
       leds[i * 3 + 29] = CRGB::Black;
       leds[i * 3 + 30] = CRGB::Black;
       leds[i * 3 + 31] = CRGB::Black;
     }
   }
+  
   // fourth digit : LEDs 50 - 70
   for (int i = 0; i < 7; i++) {
-    if (thirdDigit[i] == '0') {
+    if ((getDigitArray(4, timerMode))[i] == '0') {
       leds[i * 3 + 50] = CRGB::Black;
       leds[i * 3 + 51] = CRGB::Black;
       leds[i * 3 + 52] = CRGB::Black;
+    }
+  }
+
+  // am/pm
+  if (timerMode) {
+    if (timerAm == 0) {
+      leds[71] = CRGB::Black;
+    }
+    else if (timerAm == 1) {
+      leds[72] = CRGB::Black;
+    }
+  }
+  
+  else {
+    if (am == 0) {
+      leds[71] = CRGB::Black;
+    }
+    else if (am == 1) {
+      leds[72] = CRGB::Black;
     }
   }
 
@@ -362,7 +478,7 @@ byte getRed(int i) {
 }
 
 byte getGreen(int i) {
-  return colors[i * 3 + 1]; // green part of LED  
+  return colors[i * 3 + 1]; // green part of LED
 }
 
 byte getBlue(int i) {
@@ -447,18 +563,18 @@ void checkForCommand() {
         Serial.print(", ");
         Serial.print("blue = ");
         Serial.println(blue);
-        
+
         EEPROM.update(ledNum * 3 + 3, (byte)red);
         EEPROM.update(ledNum * 3 + 4, (byte)green);
         EEPROM.update(ledNum * 3 + 5, (byte)blue);
         colors[ledNum * 3] = (byte)red;
         colors[ledNum * 3 + 1] = (byte)green;
         colors[ledNum * 3 + 2] = (byte)blue;
-        
+
       }
       // end loop
     }
-    else if (input.substring(0, i).equals("3")) { // presets
+    else if (input.substring(0, i).equals("3")) { // preset animations
       input.remove(0, i+1);
       input.replace(" ", "");
       animation = (byte)input.substring(0).toInt(); // get animation #
@@ -466,8 +582,8 @@ void checkForCommand() {
       Serial.print("animation # = ");
       Serial.println(animation);
       if (animation == 1) {
-        for (int i = 0; i < 73; i++) {
-          leds[i] = 0xFF0000;
+        for (int j = 0; j < 73; j++) {
+          leds[j] = 0xFF0000;
         }
       }
 
@@ -482,20 +598,61 @@ void checkForCommand() {
       Serial.println("turning LEDs on");
       startUpMode = 0;
     }
+    else if (input.substring(0, i).equals("6")) { // set timer
+      // format: "6: hh:mm:ss"
+      input.replace(" ", "");
+      input.remove(0, i+1); // remove command
+      // get hour
+      int j = 0;
+      while (input.charAt(j) != ':' && input.charAt(j) != '\0' && input.charAt(j) != '\n') {
+        j++;
+      }
+      int hour = input.substring(0, j).toInt();
+      input.remove(0, j + 1); // remove hour and proceeding colon
+      j = 0;
+      while (input.charAt(j) != ':' && input.charAt(j) != '\0' && input.charAt(j) != '\n') {
+        j++;
+      }
+      int minute = input.substring(0, j).toInt();
+      input.remove(0, j + 1); // remove minute and proceeding colon
+      j = 0;
+      while (input.charAt(j) != ':' && input.charAt(j) != '\0' && input.charAt(j) != '\n') {
+        j++;
+      }
+      int second = input.substring(0, j).toInt();
+      setTimer(hour, minute, second);
+      Serial.print("timer set for ");
+      Serial.print(hour);
+      Serial.print(":");
+      Serial.print(minute);
+      Serial.print(":");
+      Serial.println(second);
+
+      // set timerLength
+      timerLength = hour * 3600000;  // add hours in milliseconds
+      timerLength += minute * 60000; // add minutes in milliseconds
+      timerLength += second * 1000;  // add seconds in milliseconds
+      Serial.print("timer length = ");
+      Serial.println(timerLength);
+
+      timerStart = millis();
+      timerMode = 1;
+
+    }
     else if (input.substring(0, i).equals("9")) { // debugging
       // print LED EEPROM
-      for (int i = 0; i < 73; i++) {
+      for (int j = 0; j < 73; j++) {
         Serial.print("LED: ");
-        Serial.print(i);
+        Serial.print(j);
         Serial.print(", ");
         Serial.print("red = ");
-        Serial.print(EEPROM.read(i * 3 + 3));
+        Serial.print(EEPROM.read(j * 3 + 3));
         Serial.print(", ");
         Serial.print("green = ");
-        Serial.print(EEPROM.read(i * 3 + 4));
+        Serial.print(EEPROM.read(j * 3 + 4));
         Serial.print(", ");
         Serial.print("blue = ");
-        Serial.println(EEPROM.read(i * 3 + 5));
+        Serial.println(EEPROM.read(j * 3 + 5));
       }
     }
   }
@@ -545,9 +702,9 @@ void printDigits() {
 }
 
 int freeRam() {
-  extern int __heap_start, *__brkval; 
-  int v; 
-  return (int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval); 
+  extern int __heap_start, *__brkval;
+  int v;
+  return (int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval);
 }
 
 //void getString(String *input) {
