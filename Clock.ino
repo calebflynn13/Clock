@@ -7,6 +7,9 @@
 #define LED_TYPE    WS2812B
 #define COLOR_ORDER GRB
 #define MAXBUFFER   500
+
+#define TIMER_ALERT_TIMEOUT 10
+
 CRGB leds[NUM_LEDS];
 byte colors[73 * 3];
 
@@ -25,7 +28,7 @@ unsigned long animationStart; // what time the animation starts
 
 byte timerMode = 0; // 1 = true, 0 = false
 unsigned long timerStart;
-unsigned long timerLength = 0;
+long timerLength = 0; // keep it signed so we can detect when it crosses 0 threshold
 byte timerAm = 0;
 
 char* firstDigit;
@@ -119,11 +122,19 @@ void loop() {
     previousTime = currentTime;
   }
   if (timerMode) {
-    timerLength -= (currentTime - timerStart);
-    byte hour = timerLength /  3600000;  // get hours
+    timerLength -= (currentTime - timerStart); // get total milliseconds left
+    byte hour = timerLength /  3600000;  // get hours left
     byte minute = (timerLength - hour) / 60000; // get minutes left
     byte second = (timerLength - hour - minute) / 1000; // get seconds left
-    setTimer(hour, minute, second);
+    if (timerLength <= 0) {
+      setTimer(0, 0, 0); // keep clock at 0's
+      if (timerLength <= -1 * TIMER_ALERT_TIMEOUT * 1000) {
+        timerMode = 0; // reset to clock mode
+      }
+    }
+    else {
+      setTimer(hour, minute, second);
+    }
   }
   checkForCommand(); // used to set the time
   getLit();
@@ -406,7 +417,7 @@ void getLit() {
       leds[i].blue = getBlue(i);
     }
   }
-  
+
   // turn ones we don't want off for timer or clock depending on mode
   // first digit : LEDs 0 - 5
   if ((getDigitArray(1, timerMode))[2] == '0') {
@@ -419,7 +430,7 @@ void getLit() {
     leds[4] = CRGB::Black;
     leds[5] = CRGB::Black;
   }
-  
+
   // second digit : LEDs 6 - 26
   for (int i = 0; i < 7; i++) {
     if ((getDigitArray(2, timerMode))[i] == '0') {
@@ -428,7 +439,7 @@ void getLit() {
       leds[i * 3 + 8] = CRGB::Black;
     }
   }
-  
+
   // third digit : LEDs 29 - 49
   for (int i = 0; i < 7; i++) {
     if ((getDigitArray(3, timerMode))[i] == '0') {
@@ -437,7 +448,7 @@ void getLit() {
       leds[i * 3 + 31] = CRGB::Black;
     }
   }
-  
+
   // fourth digit : LEDs 50 - 70
   for (int i = 0; i < 7; i++) {
     if ((getDigitArray(4, timerMode))[i] == '0') {
@@ -456,7 +467,7 @@ void getLit() {
       leds[72] = CRGB::Black;
     }
   }
-  
+
   else {
     if (am == 0) {
       leds[71] = CRGB::Black;
@@ -637,7 +648,6 @@ void checkForCommand() {
 
       timerStart = millis();
       timerMode = 1;
-
     }
     else if (input.substring(0, i).equals("9")) { // debugging
       // print LED EEPROM
