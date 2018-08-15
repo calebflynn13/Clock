@@ -2,7 +2,7 @@
 #include <EEPROM.h>
 
 #define LED_PIN     12
-#define NUM_LEDS    73
+#define NUM_LEDS    96
 #define BRIGHTNESS  64
 #define LED_TYPE    WS2812B
 #define COLOR_ORDER GRB
@@ -11,7 +11,7 @@
 #define TIMER_ALERT_TIMEOUT 10
 
 CRGB leds[NUM_LEDS];
-byte colors[73 * 3];
+byte colors[NUM_LEDS * 3];
 
 // declare global variables here
 #define MINUTE 60000
@@ -99,13 +99,13 @@ void setup() {
   FastLED.setBrightness(BRIGHTNESS);
   printTime();
   // read in colors from memory
-  for (int i = 0; i < 73; i++) {
+  for (int i = 0; i < NUM_LEDS; i++) {
     colors[i * 3]     = EEPROM.read(i * 3 + 3); // red
     colors[i * 3 + 1] = EEPROM.read(i * 3 + 4); // green
     colors[i * 3 + 2] = EEPROM.read(i * 3 + 5); // blue
   }
   // read in animation variable from memory
-  animation = EEPROM.read(73 * 3 + 3);
+  animation = EEPROM.read(NUM_LEDS * 3);
 
   digitalWrite(LED_BUILTIN, HIGH);
   Serial.println("startup end");
@@ -376,7 +376,7 @@ void getLit() {
       // do solid rainbow transition animation
       float progress = (float) (((currentTime - animationStart) % 24000) / 24000.0);
       byte fractionProgress = (byte) (progress * 6); // 0 - 5
-      for (int i = 0; i < 73; i++) {
+      for (int i = 0; i < NUM_LEDS; i++) {
         if (fractionProgress == 0) {
           leds[i].red = 255;
           leds[i].green = (byte) ((progress * 6.0) * 255.0); // increase green
@@ -411,7 +411,7 @@ void getLit() {
     }
   }
   else {
-    for (int i = 0; i < 73; i++) {
+    for (int i = 0; i < NUM_LEDS; i++) {
       leds[i].red = getRed(i);
       leds[i].green = getGreen(i);
       leds[i].blue = getBlue(i);
@@ -419,61 +419,68 @@ void getLit() {
   }
 
   // turn ones we don't want off for timer or clock depending on mode
-  // first digit : LEDs 0 - 5
+  // first digit : LEDs 0 - 7
   if ((getDigitArray(1, timerMode))[2] == '0') {
     leds[0] = CRGB::Black;
     leds[1] = CRGB::Black;
     leds[2] = CRGB::Black;
+    leds[3] = CRGB::Black;
   }
   if ((getDigitArray(1, timerMode))[6] == '0') {
-    leds[3] = CRGB::Black;
     leds[4] = CRGB::Black;
     leds[5] = CRGB::Black;
+    leds[6] = CRGB::Black;
+    leds[7] = CRGB::Black;
   }
 
-  // second digit : LEDs 6 - 26
+  // second digit : LEDs 8 - 35
   for (int i = 0; i < 7; i++) {
     if ((getDigitArray(2, timerMode))[i] == '0') {
-      leds[i * 3 + 6] = CRGB::Black;
-      leds[i * 3 + 7] = CRGB::Black;
-      leds[i * 3 + 8] = CRGB::Black;
+      leds[i * 4 + 8 ] = CRGB::Black;
+      leds[i * 4 + 9 ] = CRGB::Black;
+      leds[i * 4 + 10] = CRGB::Black;
+      leds[i * 4 + 11] = CRGB::Black;
     }
   }
 
-  // third digit : LEDs 29 - 49
+  // leave two colons as is.
+
+  // third digit : LEDs 38 - 65
   for (int i = 0; i < 7; i++) {
     if ((getDigitArray(3, timerMode))[i] == '0') {
-      leds[i * 3 + 29] = CRGB::Black;
-      leds[i * 3 + 30] = CRGB::Black;
-      leds[i * 3 + 31] = CRGB::Black;
+      leds[i * 4 + 38] = CRGB::Black;
+      leds[i * 4 + 39] = CRGB::Black;
+      leds[i * 4 + 40] = CRGB::Black;
+      leds[i * 4 + 41] = CRGB::Black;
     }
   }
 
-  // fourth digit : LEDs 50 - 70
+  // fourth digit : LEDs 66 - 93
   for (int i = 0; i < 7; i++) {
     if ((getDigitArray(4, timerMode))[i] == '0') {
-      leds[i * 3 + 50] = CRGB::Black;
-      leds[i * 3 + 51] = CRGB::Black;
-      leds[i * 3 + 52] = CRGB::Black;
+      leds[i * 4 + 66] = CRGB::Black;
+      leds[i * 4 + 67] = CRGB::Black;
+      leds[i * 4 + 68] = CRGB::Black;
+      leds[i * 4 + 69] = CRGB::Black;
     }
   }
 
   // am/pm
   if (timerMode) {
     if (timerAm == 0) {
-      leds[71] = CRGB::Black;
+      leds[94] = CRGB::Black;
     }
     else if (timerAm == 1) {
-      leds[72] = CRGB::Black;
+      leds[95] = CRGB::Black;
     }
   }
 
   else {
     if (am == 0) {
-      leds[71] = CRGB::Black;
+      leds[94] = CRGB::Black;
     }
     else if (am == 1) {
-      leds[72] = CRGB::Black;
+      leds[95] = CRGB::Black;
     }
   }
 
@@ -549,12 +556,12 @@ void checkForCommand() {
     else if (input.substring(0, i).equals("2")) { // LED:
       Serial.println("got an LED command");
       animation = 0; // not an animation any more
-      EEPROM.update(73 * 3 + 3, animation);
+      EEPROM.update(NUM_LEDS * 3, animation);
       input.replace(" ", "");
       input.remove(0, i+1); // remove command
       // get args
       //start loop
-      for (int j = 0; j < 73; j++){ // go through all LEDs
+      for (int j = 0; j < NUM_LEDS; j++){ // go through all LEDs
         byte ledNum = j;
         byte red = (byte) strtol(input.substring(0, 2).c_str(), NULL, 16);
         input.remove(0, 2);
@@ -589,11 +596,11 @@ void checkForCommand() {
       input.remove(0, i+1);
       input.replace(" ", "");
       animation = (byte)input.substring(0).toInt(); // get animation #
-      EEPROM.update(73 * 3 + 3, animation);
+      EEPROM.update(NUM_LEDS * 3, animation);
       Serial.print("animation # = ");
       Serial.println(animation);
       if (animation == 1) {
-        for (int j = 0; j < 73; j++) {
+        for (int j = 0; j < NUM_LEDS; j++) {
           leds[j] = 0xFF0000;
         }
       }
@@ -651,7 +658,7 @@ void checkForCommand() {
     }
     else if (input.substring(0, i).equals("9")) { // debugging
       // print LED EEPROM
-      for (int j = 0; j < 73; j++) {
+      for (int j = 0; j < NUM_LEDS; j++) {
         Serial.print("LED: ");
         Serial.print(j);
         Serial.print(", ");
