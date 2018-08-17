@@ -2,7 +2,7 @@
 #include <EEPROM.h>
 
 #define LED_PIN     12
-#define NUM_LEDS    96
+#define NUM_LEDS    98
 #define BRIGHTNESS  64
 #define LED_TYPE    WS2812B
 #define COLOR_ORDER GRB
@@ -420,13 +420,13 @@ void getLit() {
 
   // turn ones we don't want off for timer or clock depending on mode
   // first digit : LEDs 0 - 7
-  if ((getDigitArray(1, timerMode))[2] == '0') {
+  if ((getDigitArray(1, timerMode))[6] == '0') {
     leds[0] = CRGB::Black;
     leds[1] = CRGB::Black;
     leds[2] = CRGB::Black;
     leds[3] = CRGB::Black;
   }
-  if ((getDigitArray(1, timerMode))[6] == '0') {
+  if ((getDigitArray(1, timerMode))[2] == '0') {
     leds[4] = CRGB::Black;
     leds[5] = CRGB::Black;
     leds[6] = CRGB::Black;
@@ -469,9 +469,11 @@ void getLit() {
   if (timerMode) {
     if (timerAm == 0) {
       leds[94] = CRGB::Black;
+      leds[95] = CRGB::Black;
     }
     else if (timerAm == 1) {
-      leds[95] = CRGB::Black;
+      leds[96] = CRGB::Black;
+      leds[97] = CRGB::Black;
     }
   }
 
