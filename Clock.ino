@@ -6,15 +6,16 @@
 #define BRIGHTNESS  64
 #define LED_TYPE    WS2812B
 #define COLOR_ORDER GRB
-#define MAXBUFFER   500
 
 #define TIMER_ALERT_TIMEOUT 10
+
+
+// declare global variables here
+#define MINUTE 60000
 
 CRGB leds[NUM_LEDS];
 byte colors[NUM_LEDS * 3];
 
-// declare global variables here
-#define MINUTE 60000
 unsigned long currentTime;
 unsigned long previousTime = 0;
 byte currentMinute = 0;
@@ -27,7 +28,7 @@ byte animation = 0; // which animation we are playing
 unsigned long animationStart; // what time the animation starts
 
 byte timerMode = 0; // 1 = true, 0 = false
-unsigned long timerStart;
+unsigned long timerPrev;
 long timerLength = 0; // keep it signed so we can detect when it crosses 0 threshold
 byte timerAm = 0;
 
@@ -98,6 +99,8 @@ void setup() {
   FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS);
   FastLED.setBrightness(BRIGHTNESS);
   printTime();
+  timerMode = 0; // only sent over command
+  
   // read in colors from memory
   for (int i = 0; i < NUM_LEDS; i++) {
     colors[i * 3]     = EEPROM.read(i * 3 + 3); // red
@@ -122,10 +125,19 @@ void loop() {
     previousTime = currentTime;
   }
   if (timerMode) {
-    timerLength -= (currentTime - timerStart); // get total milliseconds left
-    byte hour = timerLength /  3600000;  // get hours left
-    byte minute = (timerLength - hour) / 60000; // get minutes left
-    byte second = (timerLength - hour - minute) / 1000; // get seconds left
+    timerLength -= (currentTime - timerPrev); // get total milliseconds left
+    timerPrev = currentTime;
+    byte hour = (byte)(timerLength /  3600000);  // get hours left
+    byte minute = (byte)((timerLength - (hour * 3600000)) / 60000); // get minutes left
+    byte second = (byte)((timerLength - (hour * 3600000) - (minute * 60000)) / 1000); // get seconds left
+    Serial.print("timerLength = ");
+    Serial.print(timerLength);
+    Serial.print("  time left = ");
+    Serial.print(hour);
+    Serial.print(":");
+    Serial.print(minute);
+    Serial.print(":");
+    Serial.println(second);
     if (timerLength <= 0) {
       setTimer(0, 0, 0); // keep clock at 0's
       if (timerLength <= -1 * TIMER_ALERT_TIMEOUT * 1000) {
@@ -166,18 +178,18 @@ void incrementHour() {
 void setTime() {
   // set the clock digits
   setDigit(1, currentHour / 10, 0);
-  setDigit(2, currentHour - (currentHour / 10), 0);
+  setDigit(2, currentHour - 10 * (currentHour / 10), 0);
   setDigit(3, currentMinute / 10, 0);
-  setDigit(4, currentMinute - (currentMinute / 10), 0);
+  setDigit(4, currentMinute - 10 * (currentMinute / 10), 0);
 }
 
 void setTimer(byte hour, byte minute, byte second) {
   // case 1: minute > 20
-  if (minute > 20 || hour > 0) {
+  if (minute >= 20 || hour > 0) {
     setDigit(1, hour / 10, 1);
-    setDigit(2, hour - (hour / 10), 1);
+    setDigit(2, hour - 10 * (hour / 10), 1);
     setDigit(3, minute / 10, 1);
-    setDigit(4, minute - (minute / 10), 1);
+    setDigit(4, minute - 10 * (minute / 10), 1);
     if (second % 2 == 0) {
       timerAm = 1;
     }
@@ -187,9 +199,9 @@ void setTimer(byte hour, byte minute, byte second) {
   }
   else { // 19 or less minutes left, put minutes in left side, seconds on right
     setDigit(1, minute / 10, 1);
-    setDigit(2, minute - (minute / 10), 1);
-    setDigit(1, second / 10, 1);
-    setDigit(2, second - (second / 10), 1);
+    setDigit(2, minute - 10 * (minute / 10), 1);
+    setDigit(3, second / 10, 1);
+    setDigit(4, second - 10 * (second / 10), 1);
   }
 }
 
@@ -480,9 +492,11 @@ void getLit() {
   else {
     if (am == 0) {
       leds[94] = CRGB::Black;
+      leds[95] = CRGB::Black;
     }
     else if (am == 1) {
-      leds[95] = CRGB::Black;
+      leds[96] = CRGB::Black;
+      leds[97] = CRGB::Black;
     }
   }
 
@@ -655,7 +669,7 @@ void checkForCommand() {
       Serial.print("timer length = ");
       Serial.println(timerLength);
 
-      timerStart = millis();
+      timerPrev = millis();
       timerMode = 1;
     }
     else if (input.substring(0, i).equals("9")) { // debugging
@@ -673,6 +687,8 @@ void checkForCommand() {
         Serial.print("blue = ");
         Serial.println(EEPROM.read(j * 3 + 5));
       }
+      Serial.print("timeMode = ");
+      Serial.println(timerMode);
     }
   }
 }
