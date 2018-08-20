@@ -3,7 +3,7 @@
 
 #define LED_PIN     12
 #define NUM_LEDS    98
-#define BRIGHTNESS  64
+#define BRIGHTNESS  255
 #define LED_TYPE    WS2812B
 #define COLOR_ORDER GRB
 
@@ -124,7 +124,19 @@ void loop() {
     Serial.print(":");
     Serial.println(second);
     if (timerLength <= 0) {
-      setTimer(0, 0, 0); // keep clock at 0's
+      byte halfSecond = ((timerLength - (hour * 3600000) - (minute * 60000)) / 500);      
+      if (halfSecond % 2 == 0) {
+        setDigit(1, -1, 1);
+        setDigit(2, -1, 1);
+        setDigit(3, -1, 1);
+        setDigit(4, -1, 1);
+      }
+      else {
+        setDigit(1, 0, 1);
+        setDigit(2, 0, 1);
+        setDigit(3, 0, 1);
+        setDigit(4, 0, 1);
+      }
       if (timerLength <= -1 * TIMER_ALERT_TIMEOUT * 1000) {
         timerMode = 0; // reset to clock mode
         setTime(); // return digit arrays back to clock mode
@@ -321,9 +333,17 @@ int setDigit(int clockDigit, int setTo, byte clockType) {
       array[2] = '1';
       array[3] = '1';
       array[4] = '0';
-      array[5] = '0';
+      array[5] = '1';
       array[6] = '1';
       break;
+    case -1:
+      array[0] = '0';
+      array[1] = '0';
+      array[2] = '0';
+      array[3] = '0';
+      array[4] = '0';
+      array[5] = '0';
+      array[6] = '0';
     default:
       return 1;
       break;
