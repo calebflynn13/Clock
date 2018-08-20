@@ -37,11 +37,6 @@ char* secondDigit;
 char* thirdDigit;
 char* fourthDigit;
 
-char* timerFirstDigit;
-char* timerSecondDigit;
-char* timerThirdDigit;
-char* timerFourthDigit;
-
 //protoypes
 void incrementMinute();
 void incrementHour();
@@ -77,16 +72,6 @@ void setup() {
   setDigit(3, 0, 0);
   setDigit(4, 0, 0);
   setPM();
-
-  // initialize timer digits
-  timerFirstDigit = (char*)malloc(sizeof(char) * 7);
-  timerSecondDigit = (char*)malloc(sizeof(char) * 7);
-  timerThirdDigit = (char*)malloc(sizeof(char) * 7);
-  timerFourthDigit = (char*)malloc(sizeof(char) * 7);
-  setDigit(1, 0, 1);
-  setDigit(2, 0, 1);
-  setDigit(3, 0, 1);
-  setDigit(4, 0, 1);
 
   // get time from EEPROM
   currentHour =   EEPROM.read(0);
@@ -142,6 +127,7 @@ void loop() {
       setTimer(0, 0, 0); // keep clock at 0's
       if (timerLength <= -1 * TIMER_ALERT_TIMEOUT * 1000) {
         timerMode = 0; // reset to clock mode
+        setTime(); // return digit arrays back to clock mode
       }
     }
     else {
@@ -164,7 +150,9 @@ void incrementMinute() {
   if (currentMinute == 0) {
     incrementHour();
   }
-  setTime();
+  if (timerMode == 0) {
+    setTime();
+  }
 }
 
 void incrementHour() {
@@ -344,7 +332,6 @@ int setDigit(int clockDigit, int setTo, byte clockType) {
 }
 
 char* getDigitArray(int clockDigit, byte clockType) {
-  if (clockType == 0) { // clock mode
     switch(clockDigit) {
       case 1:
         return firstDigit;
@@ -359,23 +346,6 @@ char* getDigitArray(int clockDigit, byte clockType) {
         return fourthDigit;
         break;
     }
-  }
-  else if (clockType == 1) {
-    switch(clockDigit) { // timer mode
-      case 1:
-        return timerFirstDigit;
-        break;
-      case 2:
-        return timerSecondDigit;
-        break;
-      case 3:
-        return timerThirdDigit;
-        break;
-      case 4:
-        return timerFourthDigit;
-        break;
-    }
-  }
     return firstDigit; // default case
 }
 
