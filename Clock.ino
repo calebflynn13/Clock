@@ -3,7 +3,7 @@
 
 #define LED_PIN     12
 #define NUM_LEDS    98
-#define BRIGHTNESS  255
+#define BRIGHTNESS  192
 #define LED_TYPE    WS2812B
 #define COLOR_ORDER GRB
 
@@ -661,6 +661,11 @@ void checkForCommand() {
 
       timerPrev = millis();
       timerMode = 1;
+    }
+    else if (input.substring(0, i).equals("7")) {
+      Serial.println("put in clock mode");
+      timerMode = 0;
+      setTime(); // return digits back to normal
     }
     else if (input.substring(0, i).equals("9")) { // debugging
       // print LED EEPROM
