@@ -11,15 +11,18 @@
 
 
 // declare global variables here
+#define HOUR   3600000
 #define MINUTE 60000
+#define SECOND 1000
 
 CRGB leds[NUM_LEDS];
 byte colors[NUM_LEDS * 3];
 
 unsigned long currentTime;
 unsigned long previousTime = 0;
-byte currentMinute = 0;
 byte currentHour = 12;
+byte currentMinute = 0;
+byte currentSecond = 0;
 byte am = 1; // 0 = false 1 = true;
 
 byte startUpMode = 0; // 1 = true, 0 = false;
@@ -76,6 +79,7 @@ void setup() {
   // get time from EEPROM
   currentHour =   EEPROM.read(0);
   currentMinute = EEPROM.read(1);
+  currentSecond = 0;
   am =            EEPROM.read(2);
   setTime(); // set to the real time
   timerMode = 0; // only sent over command
@@ -85,7 +89,7 @@ void setup() {
   FastLED.setBrightness(BRIGHTNESS);
   printTime();
   timerMode = 0; // only sent over command
-  
+
   // read in colors from memory
   for (int i = 0; i < NUM_LEDS; i++) {
     colors[i * 3]     = EEPROM.read(i * 3 + 3); // red
@@ -103,18 +107,17 @@ void loop() {
   // get current time
   currentTime = millis();
   // currentently accounts for millis() overflow by calculating duration
-  if (currentTime - previousTime >= MINUTE) {
-    incrementMinute();
-    printTime();
+  if (currentTime - previousTime >= SECOND) {
+    incrementSecond();
     // last thing to do
     previousTime = currentTime;
   }
   if (timerMode) {
     timerLength -= (currentTime - timerPrev); // get total milliseconds left
     timerPrev = currentTime;
-    byte hour = (byte)(timerLength /  3600000);  // get hours left
-    byte minute = (byte)((timerLength - (hour * 3600000)) / 60000); // get minutes left
-    byte second = (byte)((timerLength - (hour * 3600000) - (minute * 60000)) / 1000); // get seconds left
+    byte hour = (byte)(timerLength /  HOUR);  // get hours left
+    byte minute = (byte)((timerLength - (hour * HOUR)) / MINUTE); // get minutes left
+    byte second = (byte)((timerLength - (hour * HOUR) - (minute * MINUTE)) / SECOND); // get seconds left
     Serial.print("timerLength = ");
     Serial.print(timerLength);
     Serial.print("  time left = ");
@@ -124,7 +127,7 @@ void loop() {
     Serial.print(":");
     Serial.println(second);
     if (timerLength <= 0) {
-      byte halfSecond = ((timerLength - (hour * 3600000) - (minute * 60000)) / 500);      
+      byte halfSecond = ((timerLength - (hour * HOUR) - (minute * MINUTE)) / 500);      
       if (halfSecond % 2 == 0) {
         setDigit(1, -1, 1);
         setDigit(2, -1, 1);
@@ -137,7 +140,7 @@ void loop() {
         setDigit(3, 0, 1);
         setDigit(4, 0, 1);
       }
-      if (timerLength <= -1 * TIMER_ALERT_TIMEOUT * 1000) {
+      if (timerLength <= -1 * TIMER_ALERT_TIMEOUT * SECOND) {
         timerMode = 0; // reset to clock mode
         setTime(); // return digit arrays back to clock mode
       }
@@ -153,8 +156,14 @@ void loop() {
 
 void changeTime() {
   setTime();
-  previousTime = currentTime;
   printTime();
+}
+
+void incrementSecond() {
+  currentSecond++; currentSecond %= 60;
+  if (currentSecond == 0) {
+    incrementMinute();
+  }
 }
 
 void incrementMinute() {
@@ -373,7 +382,7 @@ char* getDigitArray(int clockDigit, byte clockType) {
 
 void getLit() {
   // set to proper colors:
-  if (animation) {
+  if (animation > 0) {
     if (animation == 1) {
       // do solid rainbow transition animation
       float progress = (float) (((currentTime - animationStart) % 24000) / 24000.0);
@@ -524,33 +533,49 @@ void checkForCommand() {
       i++;
     }
     if (input.substring(0, i).equals("1")) { // time:
-      Serial.println(freeRam());
+      // format 1:12:34:56:am
       input.remove(0, i+1);
       input.replace(" ", "");
       input.toLowerCase();
-      // if 1:23pm
-      if (input.charAt(1) == ':') {
-        currentHour = (byte)input.substring(0, 1).toInt();
-        currentMinute = (byte)input.substring(2,4).toInt();
-        Serial.print("hour = ");
-        Serial.println(currentHour);
-        Serial.print("minute = ");
-        Serial.println(currentMinute);
 
-        if (input.substring(4,6).equals("am"))
-          am = 1;
-        else
-          am = 0;
+      // get hour
+      byte j = 0;
+      while (input.charAt(j) != ':' && input.charAt(j) != '\0' && input.charAt(j) != '\n') {
+        j++;
       }
-      // if 12:34pm
+      currentHour = (byte)input.substring(0, j).toInt();
+      input.remove(0, j + 1); // remove hour plus ':'
+
+      // get minute
+      j = 0;
+      while (input.charAt(j) != ':' && input.charAt(j) != '\0' && input.charAt(j) != '\n') {
+        j++;
+      }
+      currentMinute = (byte)input.substring(0, j).toInt();
+      input.remove(0, j + 1); // remove minute plus ':'
+
+      // get second
+      j = 0;
+      while (input.charAt(j) != ':' && input.charAt(j) != '\0' && input.charAt(j) != '\n') {
+        j++;
+      }
+      currentSecond = (byte)input.substring(0, j).toInt();
+      input.remove(0, j + 1); // remove seconds plus ':'
+
+      if (input.substring(0, 2).equals("am")) {
+        am = 1;
+      }
       else {
-        currentHour = (byte)input.substring(0, 2).toInt();
-        currentMinute = (byte)input.substring(3,5).toInt();
-        if (input.substring(5,7).equals("am"))
-          am = 1;
-        else
-          am = 0;
+        am = 0;
       }
+
+      Serial.print("hour = ");
+      Serial.println(currentHour);
+      Serial.print("minute = ");
+      Serial.println(currentMinute);
+      Serial.print("second = ");
+      Serial.println(currentSecond);
+
       //potentially override time here:
       EEPROM.update(0, currentHour); // hour
       EEPROM.update(1, currentMinute); // minute
@@ -693,6 +718,8 @@ void printTime() {
   Serial.print(currentHour);
   Serial.print(":");
   Serial.print(currentMinute);
+  Serial.print(":");
+  Serial.print(currentSecond);
   if (am)
     Serial.println(" AM");
   else
