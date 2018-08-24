@@ -3,7 +3,6 @@
 
 #define LED_PIN     12
 #define NUM_LEDS    98
-#define BRIGHTNESS  192
 #define LED_TYPE    WS2812B
 #define COLOR_ORDER GRB
 
@@ -17,6 +16,7 @@
 
 CRGB leds[NUM_LEDS];
 byte colors[NUM_LEDS * 3];
+byte brightness = 192;
 
 unsigned long currentTime;
 unsigned long previousTime = 0;
@@ -77,16 +77,17 @@ void setup() {
   setPM();
 
   // get time from EEPROM
-  currentHour =   EEPROM.read(0);
-  currentMinute = EEPROM.read(1);
+  currentHour = 12;
+  currentMinute = 0;
   currentSecond = 0;
-  am =            EEPROM.read(2);
+  am = 0;
+  brightness = EEPROM.read(0);
   setTime(); // set to the real time
   timerMode = 0; // only sent over command
 
   delay(3000); // power-up safety delay
   FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS);
-  FastLED.setBrightness(BRIGHTNESS);
+  FastLED.setBrightness(brightness);
   printTime();
   timerMode = 0; // only sent over command
 
@@ -691,6 +692,18 @@ void checkForCommand() {
       Serial.println("put in clock mode");
       timerMode = 0;
       setTime(); // return digits back to normal
+    }
+    else if (input.substring(0, i).equals("8")) {
+      input.replace(" ", "");
+      input.remove(0, i+1); // remove command
+      // get brightness
+      int j = 0;
+      while (input.charAt(j) != ':' && input.charAt(j) != '\0' && input.charAt(j) != '\n') {
+        j++;
+      }
+      brightness = (byte)input.substring(0, j).toInt();
+      EEPROM.update(0, brightness);
+      FastLED.setBrightness(brightness);
     }
     else if (input.substring(0, i).equals("9")) { // debugging
       // print LED EEPROM
