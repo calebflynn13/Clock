@@ -646,6 +646,7 @@ void checkForCommand() {
     }
     else if (input.substring(0, i).equals("5")) { // turn LEDs on
       Serial.println("turning LEDs on");
+      FastLED.setBrightness(brightness); // set the led brightness
       startUpMode = 0;
     }
     else if (input.substring(0, i).equals("6")) { // set timer
@@ -703,7 +704,6 @@ void checkForCommand() {
       }
       brightness = (byte)input.substring(0, j).toInt();
       EEPROM.update(0, brightness);
-      FastLED.setBrightness(brightness);
     }
     else if (input.substring(0, i).equals("9")) { // debugging
       // print LED EEPROM
