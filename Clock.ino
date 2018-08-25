@@ -98,7 +98,7 @@ void setup() {
     colors[i * 3 + 2] = EEPROM.read(i * 3 + 5); // blue
   }
   // read in animation variable from memory
-  animation = EEPROM.read(NUM_LEDS * 3);
+  animation = EEPROM.read(NUM_LEDS * 3 + 3);
 
   digitalWrite(LED_BUILTIN, HIGH);
   Serial.println("startup end");
@@ -588,19 +588,20 @@ void checkForCommand() {
     else if (input.substring(0, i).equals("2")) { // LED:
       Serial.println("got an LED command");
       animation = 0; // not an animation any more
-      EEPROM.update(NUM_LEDS * 3, animation);
+      EEPROM.update(NUM_LEDS * 3 + 3, animation);
       input.replace(" ", "");
       input.remove(0, i+1); // remove command
+//      for (int j = 0; j < input.length(); j++) { // previously used to print rgb values
+//        Serial.print((byte)input.charAt(j));
+//        Serial.print(",");
+//      }
       // get args
       //start loop
       for (int j = 0; j < NUM_LEDS; j++){ // go through all LEDs
         byte ledNum = j;
-        byte red = (byte) strtol(input.substring(0, 2).c_str(), NULL, 16);
-        input.remove(0, 2);
-        byte green = (byte) strtol(input.substring(0, 2).c_str(), NULL, 16);
-        input.remove(0, 2);
-        byte blue = (byte) strtol(input.substring(0, 2).c_str(), NULL, 16);
-        input.remove(0, 2);
+        byte red = (byte)(input.charAt(j * 3));
+        byte green = (byte)(input.charAt(j * 3 + 1));
+        byte blue = (byte)(input.charAt(j * 3 + 2));
 
         Serial.print("LED: ");
         Serial.print(ledNum);
@@ -628,7 +629,7 @@ void checkForCommand() {
       input.remove(0, i+1);
       input.replace(" ", "");
       animation = (byte)input.substring(0).toInt(); // get animation #
-      EEPROM.update(NUM_LEDS * 3, animation);
+      EEPROM.update(NUM_LEDS * 3 + 3, animation);
       Serial.print("animation # = ");
       Serial.println(animation);
       if (animation == 1) {
@@ -722,6 +723,8 @@ void checkForCommand() {
       }
       Serial.print("timeMode = ");
       Serial.println(timerMode);
+      Serial.print("animation = ");
+      Serial.println(animation);
     }
   }
 }
