@@ -14,12 +14,15 @@
 #define MINUTE 60000
 #define SECOND 1000
 
+extern volatile unsigned long timer0_millis;
+
 CRGB leds[NUM_LEDS];
 byte colors[NUM_LEDS * 3];
 byte brightness = 192;
 
 unsigned long currentTime;
 unsigned long previousTime = 0;
+float leftOver = 0; // holds leftover part of microseconds
 byte currentHour = 12;
 byte currentMinute = 0;
 byte currentSecond = 0;
@@ -81,7 +84,7 @@ void setup() {
   currentMinute = 0;
   currentSecond = 0;
   am = 0;
-  brightness = EEPROM.read(0);
+  brightness = (byte) EEPROM.read(0);
   setTime(); // set to the real time
   timerMode = 0; // only sent over command
 
@@ -93,9 +96,9 @@ void setup() {
 
   // read in colors from memory
   for (int i = 0; i < NUM_LEDS; i++) {
-    colors[i * 3]     = EEPROM.read(i * 3 + 3); // red
-    colors[i * 3 + 1] = EEPROM.read(i * 3 + 4); // green
-    colors[i * 3 + 2] = EEPROM.read(i * 3 + 5); // blue
+    colors[i * 3]     = (byte) EEPROM.read(i * 3 + 3); // red
+    colors[i * 3 + 1] = (byte) EEPROM.read(i * 3 + 4); // green
+    colors[i * 3 + 2] = (byte) EEPROM.read(i * 3 + 5); // blue
   }
   // read in animation variable from memory
   animation = EEPROM.read(NUM_LEDS * 3 + 3);
@@ -165,6 +168,7 @@ void incrementSecond() {
   if (currentSecond == 0) {
     incrementMinute();
   }
+  // updateMillis((float)13); // 13 was too fast // 12 too slow
 }
 
 void incrementMinute() {
@@ -173,8 +177,9 @@ void incrementMinute() {
     incrementHour();
   }
   if (timerMode == 0) {
-    setTime();
+    changeTime();
   }
+  updateMillis((float)644); // 644.5 too fast  // 643.75 too slow
 }
 
 void incrementHour() {
@@ -502,6 +507,8 @@ void getLit() {
 
   if (startUpMode == 0) {
     FastLED.show();
+    // add time to the clock since interrupts were disabled
+    //updateMillis((30 * NUM_LEDS) / 1000.0);
   } else {
     // do nothing
   }
@@ -578,11 +585,12 @@ void checkForCommand() {
       Serial.println(currentSecond);
 
       //potentially override time here:
-      EEPROM.update(0, currentHour); // hour
-      EEPROM.update(1, currentMinute); // minute
-      EEPROM.update(2, am); // 1 for am 0 for pm
+//      EEPROM.update(0, currentHour); // hour
+//      EEPROM.update(1, currentMinute); // minute
+//      EEPROM.update(2, am); // 1 for am 0 for pm
       Serial.println(input);
       changeTime();
+      Serial.println("a"); // confirm that command has completed
     }
     // command format: LED: LED#, redValue, greenValue, blueValue
     else if (input.substring(0, i).equals("2")) { // LED:
@@ -624,6 +632,7 @@ void checkForCommand() {
 
       }
       // end loop
+      Serial.println("a"); // confirm that command has completed
     }
     else if (input.substring(0, i).equals("3")) { // preset animations
       input.remove(0, i+1);
@@ -639,16 +648,18 @@ void checkForCommand() {
       }
 
       animationStart = millis();
+      Serial.println("a"); // confirm that command has completed
     }
     else if (input.substring(0, i).equals("4")) { // turn LEDs off
       Serial.println("turning LEDs off");
       startUpMode = 1;
       FastLED.clear();
+      Serial.println("a"); // confirm that command has completed
     }
     else if (input.substring(0, i).equals("5")) { // turn LEDs on
       Serial.println("turning LEDs on");
-      FastLED.setBrightness(brightness); // set the led brightness
       startUpMode = 0;
+      Serial.println("a"); // confirm that command has completed
     }
     else if (input.substring(0, i).equals("6")) { // set timer
       // format: "6: hh:mm:ss"
@@ -689,11 +700,13 @@ void checkForCommand() {
 
       timerPrev = millis();
       timerMode = 1;
+      Serial.println("a"); // confirm that command has completed
     }
     else if (input.substring(0, i).equals("7")) {
       Serial.println("put in clock mode");
       timerMode = 0;
       setTime(); // return digits back to normal
+      Serial.println("a"); // confirm that command has completed
     }
     else if (input.substring(0, i).equals("8")) {
       input.replace(" ", "");
@@ -705,6 +718,8 @@ void checkForCommand() {
       }
       brightness = (byte)input.substring(0, j).toInt();
       EEPROM.update(0, brightness);
+      FastLED.setBrightness(brightness); // set the led brightness
+      Serial.println("a"); // confirm that command has completed
     }
     else if (input.substring(0, i).equals("9")) { // debugging
       // print LED EEPROM
@@ -780,8 +795,17 @@ int freeRam() {
   return (int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval);
 }
 
-//void getString(String *input) {
-//  int charsRead;
-//  charsRead = Serial.readBytesUntil('\n', (char*)input, MAXBUFFER - 1);
-//  (*input).setCharAt(charsRead, '\0');      // Make it a string -- note lowercase 's'
-//}
+void updateMillis(float milliseconds) {
+  uint8_t oldSREG = SREG;
+  
+  // disable interrupts while we read timer0_millis or we might get an
+  // inconsistent value (e.g. in the middle of a write to timer0_millis)
+  cli(); // disables the interrupts
+  int intPart = (int) milliseconds;
+  leftOver += (milliseconds - intPart); // fraction of milliseconds left
+  timer0_millis += (unsigned long)(intPart + (int)leftOver); // add lost time
+  //timer0_millis += (unsigned long)milliseconds;
+  leftOver -= (int)leftOver;
+  
+  SREG = oldSREG;
+}
