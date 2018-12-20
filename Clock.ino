@@ -1,3 +1,4 @@
+// Last commit before using the rtc hardware
 #include <FastLED.h>
 #include <EEPROM.h>
 
