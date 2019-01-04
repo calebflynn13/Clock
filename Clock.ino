@@ -1,6 +1,7 @@
-// Last commit before using the rtc hardware
 #include <FastLED.h>
 #include <EEPROM.h>
+#include <Wire.h>
+#include "ds3231.h"
 
 #define LED_PIN     12
 #define NUM_LEDS    98
@@ -15,15 +16,12 @@
 #define MINUTE 60000
 #define SECOND 1000
 
-extern volatile unsigned long timer0_millis;
-
 CRGB leds[NUM_LEDS];
 byte colors[NUM_LEDS * 3];
 byte brightness = 192;
 
 unsigned long currentTime;
 unsigned long previousTime = 0;
-float leftOver = 0; // holds leftover part of microseconds
 byte currentHour = 12;
 byte currentMinute = 0;
 byte currentSecond = 0;
@@ -69,6 +67,10 @@ void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
   pinMode(12, OUTPUT);
 
+  // setup the rtc
+  Wire.begin();
+  DS3231_init(DS3231_CONTROL_INTCN);
+
   // initalize memory for didits
   firstDigit = (char*)malloc(sizeof(char) * 7);
   secondDigit = (char*)malloc(sizeof(char) * 7);
@@ -111,9 +113,31 @@ void setup() {
 void loop() {
   // get current time
   currentTime = millis();
-  // currentently accounts for millis() overflow by calculating duration
+  struct ts t;
+  
   if (currentTime - previousTime >= SECOND) {
-    incrementSecond();
+    DS3231_get(&t);
+    
+    // set the hour
+    if (t.hour > 12) {
+      am = 1;
+      currentHour = t.hour % 12;
+    }
+    else {
+      am = 0;
+      currentHour = t.hour;
+    }
+    
+    // set the minute
+    currentMinute = t.min;
+    
+    // set the seconds
+    currentSecond = t.sec;
+    
+    // only change the time if we are in clock mode
+    if (timerMode == 0) {
+      changeTime();
+    }    
     // last thing to do
     previousTime = currentTime;
   }
@@ -162,33 +186,6 @@ void loop() {
 void changeTime() {
   setTime();
   printTime();
-}
-
-void incrementSecond() {
-  currentSecond++; currentSecond %= 60;
-  if (currentSecond == 0) {
-    incrementMinute();
-  }
-  // updateMillis((float)13); // 13 was too fast // 12 too slow
-}
-
-void incrementMinute() {
-  currentMinute++; currentMinute %= 60; // return to 0 if we increment
-  if (currentMinute == 0) {
-    incrementHour();
-  }
-  if (timerMode == 0) {
-    changeTime();
-  }
-  updateMillis((float)644); // 644.5 too fast  // 643.75 too slow
-}
-
-void incrementHour() {
-  currentHour++; currentHour %= 12;
-  if (currentHour == 0) {
-    currentHour = 12;
-    am = !am;
-  }
 }
 
 void setTime() {
@@ -508,8 +505,6 @@ void getLit() {
 
   if (startUpMode == 0) {
     FastLED.show();
-    // add time to the clock since interrupts were disabled
-    //updateMillis((30 * NUM_LEDS) / 1000.0);
   } else {
     // do nothing
   }
@@ -794,19 +789,4 @@ int freeRam() {
   extern int __heap_start, *__brkval;
   int v;
   return (int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval);
-}
-
-void updateMillis(float milliseconds) {
-  uint8_t oldSREG = SREG;
-  
-  // disable interrupts while we read timer0_millis or we might get an
-  // inconsistent value (e.g. in the middle of a write to timer0_millis)
-  cli(); // disables the interrupts
-  int intPart = (int) milliseconds;
-  leftOver += (milliseconds - intPart); // fraction of milliseconds left
-  timer0_millis += (unsigned long)(intPart + (int)leftOver); // add lost time
-  //timer0_millis += (unsigned long)milliseconds;
-  leftOver -= (int)leftOver;
-  
-  SREG = oldSREG;
 }
